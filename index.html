@@ -146,10 +146,20 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
 #TOUCH{position:fixed;inset:0;pointer-events:none;z-index:20;display:none}
 #TOUCH.show{display:block}
 
-/* Joystick */
-.joy-area{position:absolute;bottom:max(calc(18px + var(--safe)),28px);left:16px;width:140px;height:140px;pointer-events:all}
-.joy-ring{position:absolute;inset:0;border-radius:50%;background:rgba(0,245,255,.06);border:2px solid rgba(0,245,255,.2)}
-.joy-knob{width:52px;height:52px;border-radius:50%;background:rgba(0,245,255,.18);border:2px solid rgba(0,245,255,.7);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 14px rgba(0,245,255,.28);pointer-events:none}
+/* ── D-PAD (replaces joystick) ── */
+.dpad{position:absolute;bottom:max(calc(24px + var(--safe)),34px);left:12px;width:156px;height:156px;pointer-events:none}
+.dp{position:absolute;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;pointer-events:all;background:rgba(0,0,0,.55);border:2px solid rgba(0,245,255,.35);color:rgba(255,255,255,.9);user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent;transition:background .06s,border-color .06s}
+.dp.on{background:rgba(0,245,255,.28);border-color:var(--c);box-shadow:0 0 12px rgba(0,245,255,.4)}
+/* Up */
+#dp-u{top:0;left:50%;transform:translateX(-50%);width:52px;height:52px}
+/* Down */
+#dp-d{bottom:0;left:50%;transform:translateX(-50%);width:52px;height:52px}
+/* Left */
+#dp-l{left:0;top:50%;transform:translateY(-50%);width:52px;height:52px}
+/* Right */
+#dp-r{right:0;top:50%;transform:translateY(-50%);width:52px;height:52px}
+/* Center (empty visual) */
+.dp-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:rgba(0,245,255,.06);border:1px solid rgba(0,245,255,.15);pointer-events:none}
 
 /* Look area */
 .look-area{position:absolute;right:0;bottom:0;top:0;left:42%;pointer-events:all}
@@ -328,9 +338,13 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
 
 <!-- TOUCH UI -->
 <div id="TOUCH">
-  <div class="joy-area" id="JA">
-    <div class="joy-ring"></div>
-    <div class="joy-knob" id="JK"></div>
+  <!-- D-PAD — 4 absolute direction buttons -->
+  <div class="dpad">
+    <button class="dp" id="dp-u">▲</button>
+    <button class="dp" id="dp-d">▼</button>
+    <button class="dp" id="dp-l">◀</button>
+    <button class="dp" id="dp-r">▶</button>
+    <div class="dp-center"></div>
   </div>
   <div class="look-area" id="LA"></div>
   <button class="tbtn" id="tb-fire">FIRE</button>
@@ -339,7 +353,7 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
   <button class="tbtn" id="tb-slide">SLIDE</button>
   <button class="tbtn" id="tb-swap">SWAP</button>
   <button class="tbtn" id="tb-aim">AIM</button>
-  <button class="tbtn" id="tb-nade" style="width:48px;height:48px;right:130px;bottom:max(calc(122px + var(--safe)),138px);border-color:rgba(170,255,0,.5);font-size:.45rem">💣</button>
+  <button class="tbtn" id="tb-nade" style="width:48px;height:48px;right:130px;bottom:max(calc(122px + var(--safe)),138px);border-color:rgba(170,255,0,.5);font-size:.85rem">💣</button>
 </div>
 
 <!-- POINTER LOCK -->
@@ -427,7 +441,7 @@ let mDx=0, mDy=0, pLocked=false, mHeld=false;
 let lastFire=0, reloading=false, reloadTO=null;
 
 // Touch
-let jActive=false, jOx=0, jOy=0, jDx=0, jDz=0;
+let jActive=false, jDx=0, jDz=0;
 let tFire=false, tJump=false, ltId=null, ltLX=0, ltLY=0;
 let adsActive=false;
 
@@ -637,7 +651,7 @@ function onData(data, from) {
 function initScene() {
   THREE = window.THREE;
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x060e18, 0.009); // lighter fog = more visibility
+  scene.fog = new THREE.Fog(0x0a1828, 80, 280); // linear fog is cheaper than FogExp2
   scene.background = new THREE.Color(0x050c16);
 
   cam = new THREE.PerspectiveCamera(82, innerWidth/innerHeight, 0.04, 600);
@@ -647,72 +661,30 @@ function initScene() {
     antialias: false,
     powerPreference: 'high-performance'
   });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.3 : 1.9));
+  // PERFORMANCE: pixel ratio 1 on mobile, max 1.5 on desktop
+  renderer.setPixelRatio(isMobile ? 1 : Math.min(devicePixelRatio, 1.5));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = false;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.4; // brighter
+  renderer.toneMapping = THREE.NoToneMapping; // NoToneMapping = fastest
+  renderer.outputEncoding = THREE.LinearEncoding;
 
-  // SKY
-  scene.add(new THREE.Mesh(
-    new THREE.SphereGeometry(500, 16, 8),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      vertexShader:`varying vec3 vP;void main(){vP=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader:`varying vec3 vP;void main(){
-        float h=(vP.y+1.)*.5;
-        vec3 bot=vec3(.04,.11,.22);
-        vec3 top=vec3(.01,.04,.1);
-        vec3 col=mix(bot,top,h);
-        // Stars
-        float star=step(.998,fract(sin(dot(floor(vP*120.),vec3(12.9898,78.233,45.164)))*43758.5));
-        col+=star*.7*max(0.,vP.y);
-        gl_FragColor=vec4(col,1.);
-      }`
-    })
-  ));
+  // Simple gradient sky (no shader cost)
+  scene.background = new THREE.Color(0x0a1828);
 
-  // LIGHTS — much brighter for visibility
-  scene.add(new THREE.AmbientLight(0x3a5060, 3.0));  // strong ambient
-
-  const sun = new THREE.DirectionalLight(0xffd0a0, 4.0);
+  // LIGHTS — only 2 directional (cheapest), 2 point lights max
+  scene.add(new THREE.AmbientLight(0x6080a0, 3.5)); // bright ambient = less need for point lights
+  const sun = new THREE.DirectionalLight(0xffeedd, 3.5);
   sun.position.set(40, 80, 30); scene.add(sun);
-
-  const fill = new THREE.DirectionalLight(0x4080ff, 2.5);
+  const fill = new THREE.DirectionalLight(0x4488cc, 2.0);
   fill.position.set(-30, 40, -20); scene.add(fill);
+  // Just 2 neon point lights (not 5)
+  const nl1 = new THREE.PointLight(0x00f5ff, 4, 60); nl1.position.set(0, 12, 0); scene.add(nl1);
+  const nl2 = new THREE.PointLight(0xff0066, 3, 50); nl2.position.set(28, 8, 22); scene.add(nl2);
 
-  // Neon area lights
-  const nl1 = new THREE.PointLight(0x00f5ff, 5, 50); nl1.position.set(0, 10, 0); scene.add(nl1);
-  const nl2 = new THREE.PointLight(0xff0066, 4, 45); nl2.position.set(28, 7, 22); scene.add(nl2);
-  const nl3 = new THREE.PointLight(0xaaff00, 3.5, 45); nl3.position.set(-28, 7, -22); scene.add(nl3);
-  const nl4 = new THREE.PointLight(0xff8800, 3, 40); nl4.position.set(28, 7, -22); scene.add(nl4);
-  const nl5 = new THREE.PointLight(0x8800ff, 3, 40); nl5.position.set(-28, 7, 22); scene.add(nl5);
-
-  // Ground — grid + concrete look
-  const gCv = document.createElement('canvas'); gCv.width=gCv.height=512;
-  const gx = gCv.getContext('2d');
-  // Concrete base
-  const grad = gx.createLinearGradient(0,0,512,512);
-  grad.addColorStop(0,'#0d1e2e'); grad.addColorStop(1,'#0a1620');
-  gx.fillStyle=grad; gx.fillRect(0,0,512,512);
-  // Grid lines
-  gx.strokeStyle='rgba(0,245,255,0.18)'; gx.lineWidth=1;
-  for(let i=0;i<=512;i+=32){
-    gx.beginPath();gx.moveTo(i,0);gx.lineTo(i,512);gx.stroke();
-    gx.beginPath();gx.moveTo(0,i);gx.lineTo(512,i);gx.stroke();
-  }
-  // Noise specks
-  for(let i=0;i<4000;i++){
-    const x=Math.random()*512,y=Math.random()*512,r=Math.random()*.8+.2;
-    gx.fillStyle=`rgba(255,255,255,${Math.random()*.04})`;
-    gx.fillRect(x,y,r,r);
-  }
-  const gt = new THREE.CanvasTexture(gCv);
-  gt.wrapS=gt.wrapT=THREE.RepeatWrapping; gt.repeat.set(MAP_SZ/2.5, MAP_SZ/2.5);
-
+  // Ground — simple Lambert (fast, no texture gen overhead)
   const gnd = new THREE.Mesh(
     new THREE.PlaneGeometry(MAP_SZ*2.5, MAP_SZ*2.5, 1, 1),
-    new THREE.MeshStandardMaterial({color:0x152030, roughness:.22, metalness:.75, map:gt})
+    new THREE.MeshLambertMaterial({color:0x0e1e2e})
   );
   gnd.rotation.x = -Math.PI/2; scene.add(gnd);
 
@@ -730,36 +702,12 @@ function initScene() {
 // WORLD BUILDING
 // ═══════════════════════════════════════════════════════
 function buildWorld() {
-  // Procedural building textures
-  const makeBuildTex = (col, lineCol) => {
-    const c=document.createElement('canvas'); c.width=c.height=256;
-    const x=c.getContext('2d');
-    x.fillStyle=col; x.fillRect(0,0,256,256);
-    x.strokeStyle=lineCol; x.lineWidth=.8;
-    // horizontal window bands
-    for(let y=20;y<256;y+=28){
-      x.globalAlpha=.25; x.beginPath();x.moveTo(0,y);x.lineTo(256,y);x.stroke();
-    }
-    // vertical lines
-    for(let xi=30;xi<256;xi+=30){
-      x.globalAlpha=.12; x.beginPath();x.moveTo(xi,0);x.lineTo(xi,256);x.stroke();
-    }
-    x.globalAlpha=1;
-    // window pattern
-    x.fillStyle='rgba(100,200,255,0.08)';
-    for(let yw=24;yw<256;yw+=28){
-      for(let xw=8;xw<256;xw+=30){
-        if(Math.random()>.35) x.fillRect(xw,yw-4,18,10);
-      }
-    }
-    return new THREE.CanvasTexture(c);
-  };
-
+  // MeshLambertMaterial = much faster than MeshStandard (no PBR cost)
   const MATS = {
-    b: new THREE.MeshStandardMaterial({color:0x152030, roughness:.28, metalness:.75, map:makeBuildTex('#152030','rgba(0,245,255,0.4)')}),
-    w: new THREE.MeshStandardMaterial({color:0x0d1e2e, roughness:.65, metalness:.3}),
-    o: new THREE.MeshStandardMaterial({color:0x1a2a18, roughness:.72, metalness:.25}),
-    c: new THREE.MeshStandardMaterial({color:0x1c1c28, roughness:.8, metalness:.2}),
+    b: new THREE.MeshLambertMaterial({color:0x1a2f42}),
+    w: new THREE.MeshLambertMaterial({color:0x0e2030}),
+    o: new THREE.MeshLambertMaterial({color:0x1e2e1a}),
+    c: new THREE.MeshLambertMaterial({color:0x1c1c30}),
   };
 
   MAP.forEach(([cx,cz,w,d,h,t])=>{
@@ -768,24 +716,22 @@ function buildWorld() {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cx, h/2, cz); scene.add(mesh);
 
-    // Edges
-    const emat = new THREE.LineBasicMaterial({
-      color: t==='b'?0x00f5ff:t==='o'?0xaaff00:t==='c'?0x4466aa:0x334455,
-      transparent:true, opacity:.38
-    });
-    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), emat));
+    // Edges — only on buildings, skip others for perf
+    if (t==='b'||t==='o') {
+      const emat = new THREE.LineBasicMaterial({
+        color: t==='b'?0x00f5ff:0xaaff00, transparent:true, opacity:.35
+      });
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), emat));
+    }
 
-    // Emissive top strip on buildings
+    // Top strip on buildings — MeshBasicMaterial (unlit, cheapest)
     if (t==='b') {
       const strip = new THREE.Mesh(
-        new THREE.BoxGeometry(w,.1,d),
-        new THREE.MeshBasicMaterial({color:0x00f5ff,transparent:true,opacity:.55})
+        new THREE.BoxGeometry(w,.08,d),
+        new THREE.MeshBasicMaterial({color:0x00f5ff,transparent:true,opacity:.6})
       );
-      strip.position.set(cx,h+.05,cz); scene.add(strip);
-
-      // Roof point light
-      const rpl = new THREE.PointLight(0x00f5ff,2.5,20);
-      rpl.position.set(cx,h+.5,cz); scene.add(rpl);
+      strip.position.set(cx,h+.04,cz); scene.add(strip);
+      // NO per-building point lights — they kill performance
     }
 
     colliders.push({minX:cx-w/2,maxX:cx+w/2,minY:0,maxY:h,minZ:cz-d/2,maxZ:cz+d/2});
@@ -797,20 +743,19 @@ function buildWorld() {
     colliders.push({minX:x-w/2,maxX:x+w/2,minY:0,maxY:25,minZ:z-d/2,maxZ:z+d/2});
   });
 
-  // Street lamps
+  // Street lamps — visual only, no point lights for performance
   [[18,0],[-18,0],[0,18],[0,-18],[22,22],[-22,22],[22,-22],[-22,-22]].forEach(([px,pz])=>{
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(.16,.16,8,6),
-      new THREE.MeshStandardMaterial({color:0x223344, metalness:.75, roughness:.3})
+      new THREE.CylinderGeometry(.14,.14,7,5),
+      new THREE.MeshLambertMaterial({color:0x223344})
     );
-    pole.position.set(px,4,pz); scene.add(pole);
+    pole.position.set(px,3.5,pz); scene.add(pole);
     const globe = new THREE.Mesh(
-      new THREE.SphereGeometry(.35,8,6),
-      new THREE.MeshBasicMaterial({color:0xffeedd})
+      new THREE.SphereGeometry(.3,6,5),
+      new THREE.MeshBasicMaterial({color:0xfff0cc}) // unlit = cheap
     );
-    globe.position.set(px,8.35,pz); scene.add(globe);
-    const lamp = new THREE.PointLight(0xffe8c0, 3.5, 18);
-    lamp.position.set(px,8,pz); scene.add(lamp);
+    globe.position.set(px,7.35,pz); scene.add(globe);
+    // No point light here — too expensive on iPad
   });
 
   // ── JUMP PADS (cyan glowing platforms that launch you high) ──
@@ -835,11 +780,11 @@ function buildWorld() {
     arr.position.set(px, 1.2, pz);
     scene.add(arr);
 
-    // Glow light
-    const pl = new THREE.PointLight(0x00f5ff, 3, 8);
-    pl.position.set(px, .5, pz);
-    pl.userData.neon=true; pl.userData.base=3; pl.userData.phase=i*.8;
-    scene.add(pl);
+    // Glow light — only 1 shared, not per-pad
+    if (i===0) { // only center pad gets a light
+      const pl = new THREE.PointLight(0x00f5ff, 3, 12);
+      pl.position.set(px, .5, pz); scene.add(pl);
+    }
 
     // Collider for the pad surface (thin, just the top)
     colliders.push({minX:px-1.8,maxX:px+1.8,minY:0,maxY:.25,minZ:pz-1.8,maxZ:pz+1.8,jumpPad:true,jumpVY:vy});
@@ -915,97 +860,74 @@ function refreshGunColor() {
 }
 
 // ═══════════════════════════════════════════════════════
-// PLAYER MESHES — realistic humanoid
+// PLAYER MESHES — optimized humanoid (Lambert = fast)
 // ═══════════════════════════════════════════════════════
 function makePMesh(id, data) {
   const col = data.color || PCOLS[0];
   const g = new THREE.Group();
   g.userData.id = id;
 
-  const bodyMat = new THREE.MeshStandardMaterial({color:col, roughness:.65, metalness:.2});
-  const skinMat = new THREE.MeshStandardMaterial({color:0xd4956a, roughness:.85, metalness:.05});
-  const darkMat = new THREE.MeshStandardMaterial({color:0x223344, roughness:.9, metalness:.1});
-  const bootMat = new THREE.MeshStandardMaterial({color:0x111111, roughness:.95, metalness:.05});
+  // Share materials per color group for less draw calls
+  const bodyMat = new THREE.MeshLambertMaterial({color:col});
+  const skinMat = new THREE.MeshLambertMaterial({color:0xd4956a});
+  const darkMat = new THREE.MeshLambertMaterial({color:0x223344});
+  const bootMat = new THREE.MeshLambertMaterial({color:0x111111});
+  const armorMat = new THREE.MeshLambertMaterial({color:0x1a2a3a});
 
-  // Torso — more realistic proportions
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(.7,1.0,.45), bodyMat);
+  // Torso
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(.72,1.05,.46), bodyMat);
   torso.position.y = .7; g.add(torso);
 
-  // Chest armor plate
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(.68,.45,.3), new THREE.MeshStandardMaterial({color:0x1a2a3a, roughness:.4, metalness:.8}));
+  // Chest plate
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(.68,.44,.28), armorMat);
   chest.position.set(0,.85,.12); g.add(chest);
 
-  // Shoulder pads
+  // Shoulders + Arms (combined per side)
   [-0.42, 0.42].forEach(ox=>{
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(.22,.2,.3), bodyMat);
-    sh.position.set(ox,.92,.0); g.add(sh);
-    // Arms
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(.2,.56,.2), bodyMat);
-    arm.position.set(ox,.55,0); g.add(arm);
-    // Forearm
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(.17,.48,.17), bodyMat);
-    fore.position.set(ox,.18,0); g.add(fore);
-    // Hand
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(.22,.95,.22), bodyMat);
+    arm.position.set(ox,.5,0); g.add(arm);
     const hand = new THREE.Mesh(new THREE.BoxGeometry(.18,.16,.22), skinMat);
     hand.position.set(ox,-.1,0); g.add(hand);
   });
 
-  // Neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(.1,.12,.2,6), skinMat);
-  neck.position.y=1.25; g.add(neck);
-
-  // Head — proper shape
+  // Head
   const head = new THREE.Mesh(new THREE.BoxGeometry(.46,.5,.46), skinMat);
   head.position.y=1.6; g.add(head);
 
   // Helmet
-  const helm = new THREE.Mesh(new THREE.BoxGeometry(.5,.32,.5),
-    new THREE.MeshStandardMaterial({color:0x1a1a2e, roughness:.3, metalness:.85}));
+  const helm = new THREE.Mesh(new THREE.BoxGeometry(.52,.34,.52), armorMat);
   helm.position.y=1.72; g.add(helm);
 
-  // Visor
-  const vis = new THREE.Mesh(new THREE.BoxGeometry(.42,.14,.12),
-    new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.7}));
-  vis.position.set(0,1.63,.24); g.add(vis);
+  // Visor (MeshBasicMaterial — unlit, zero cost)
+  const vis = new THREE.Mesh(new THREE.BoxGeometry(.42,.14,.1),
+    new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.75}));
+  vis.position.set(0,1.63,.25); g.add(vis);
 
-  // Visor glow
-  const vgl = new THREE.PointLight(col,1.5,2.5);
-  vgl.position.set(0,1.63,.3); g.add(vgl);
+  // NO point light on visor (too expensive with many players)
 
   // Belt
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(.72,.1,.47), darkMat);
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(.74,.1,.48), darkMat);
   belt.position.y=.18; g.add(belt);
 
-  // Legs
+  // Legs (merged thigh+shin per leg for fewer meshes)
   [-0.2, 0.2].forEach(ox=>{
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(.3,.62,.3), darkMat);
-    thigh.position.set(ox,-.22,0); g.add(thigh);
-    const shin  = new THREE.Mesh(new THREE.BoxGeometry(.26,.55,.26), darkMat);
-    shin.position.set(ox,-.65,0); g.add(shin);
-    // Kneecap
-    const knee = new THREE.Mesh(new THREE.BoxGeometry(.29,.12,.3), bodyMat);
-    knee.position.set(ox,-.52,.02); g.add(knee);
-    // Boot
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(.3,.2,.38), bootMat);
-    boot.position.set(ox,-.95,.04); g.add(boot);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(.3,1.2,.3), darkMat);
+    leg.position.set(ox,-.6,0); g.add(leg);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(.32,.22,.4), bootMat);
+    boot.position.set(ox,-1.15,.04); g.add(boot);
   });
 
-  // Neon accent line on torso
-  const accent = new THREE.Mesh(
-    new THREE.BoxGeometry(.72,.04,.47),
+  // Neon accent stripe
+  g.add(Object.assign(new THREE.Mesh(
+    new THREE.BoxGeometry(.74,.05,.48),
     new THREE.MeshBasicMaterial({color:col})
-  );
-  accent.position.set(0,1.2,0); g.add(accent);
+  ),{position:new THREE.Vector3(0,1.2,0)}));
 
   g.position.set(data.x||0, (data.y||1.8)-1, data.z||0);
   g.rotation.y = data.yaw||0;
   scene.add(g);
   pMeshes[id] = g;
-
-  // Animate legs when moving
-  g.userData.legT = 0;
-  g.userData.legs = [g.children.findIndex(c=>c.position.x<0&&c.position.y<-.2),
-                     g.children.findIndex(c=>c.position.x>0&&c.position.y<-.2)];
+  g.userData.legT=0;
 }
 
 function movePMesh(id, data) {
@@ -1148,8 +1070,9 @@ function rmBullet(id) {
 // IMPACT SYSTEM — bullet decals + sparks
 // ═══════════════════════════════════════════════════════
 function spawnImpact(x, y, z, nx, ny, nz, explosive) {
-  // Sparks burst
-  const count = explosive ? 30 : 8;
+  // Cap total particles to avoid lag
+  if (particles.length > 60) return;
+  const count = explosive ? 18 : 6;
   for (let i=0; i<count; i++) {
     const geo = new THREE.SphereGeometry(.03+(Math.random()*.04), 3,3);
     const mat = new THREE.MeshBasicMaterial({color: explosive?0xff6600:0xffcc00});
@@ -1669,38 +1592,26 @@ function setupPointerLock() {
 }
 
 // ═══════════════════════════════════════════════════════
-// TOUCH — FIXED JOYSTICK
+// TOUCH — D-PAD (4 directional buttons, absolute world axes)
 // ═══════════════════════════════════════════════════════
 function setupTouch() {
-  const ja=document.getElementById('JA'), jk=document.getElementById('JK');
-  const R=62; // joystick radius
-
-  ja.addEventListener('touchstart', e=>{
-    e.preventDefault();
-    const t=e.touches[0], rect=ja.getBoundingClientRect();
-    jOx=rect.left+rect.width/2; jOy=rect.top+rect.height/2;
-    jActive=true;
-  },{passive:false});
-
-  ja.addEventListener('touchmove', e=>{
-    e.preventDefault(); if(!jActive) return;
-    const t=e.touches[0];
-    const dx=t.clientX-jOx, dy=t.clientY-jOy;
-    const dist=Math.min(Math.hypot(dx,dy),R);
-    const ang=Math.atan2(dy,dx);
-    const nx=Math.cos(ang)*dist, ny=Math.sin(ang)*dist;
-    jk.style.transform=`translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
-
-    // ABSOLUTE WORLD AXES — NO camera yaw dependency whatsoever:
-    // Screen X axis  → world X axis  (screen right = +X world)
-    // Screen Y axis  → world Z axis  (screen down  = +Z world, screen up = -Z = forward)
-    jDx = nx / R;    // -1 = world left,   +1 = world right
-    jDz = ny / R;    // -1 = forward (-Z), +1 = backward (+Z)
-  },{passive:false});
-
-  const resetJoy=()=>{jActive=false;jDx=0;jDz=0;jk.style.transform='translate(-50%,-50%)';};
-  ja.addEventListener('touchend',resetJoy);
-  ja.addEventListener('touchcancel',resetJoy);
+  // D-PAD: each button sets a world-axis flag directly
+  // UP    = move toward -Z world (forward on screen)
+  // DOWN  = move toward +Z world (backward on screen)
+  // LEFT  = move toward -X world (left on screen)
+  // RIGHT = move toward +X world (right on screen)
+  // Camera yaw has ZERO effect on these directions.
+  function dp(id, startFn, endFn) {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.addEventListener('touchstart', e=>{ e.preventDefault(); startFn(); b.classList.add('on'); },{passive:false});
+    b.addEventListener('touchend',   e=>{ e.preventDefault(); endFn();   b.classList.remove('on'); },{passive:false});
+    b.addEventListener('touchcancel',()=>{ endFn(); b.classList.remove('on'); });
+  }
+  dp('dp-u', ()=>{ jDz=-1; jActive=true; },  ()=>{ jDz=0; jActive=jDx!==0; });
+  dp('dp-d', ()=>{ jDz= 1; jActive=true; },  ()=>{ jDz=0; jActive=jDx!==0; });
+  dp('dp-l', ()=>{ jDx=-1; jActive=true; },  ()=>{ jDx=0; jActive=jDz!==0; });
+  dp('dp-r', ()=>{ jDx= 1; jActive=true; },  ()=>{ jDx=0; jActive=jDz!==0; });
 
   // Look zone
   const la=document.getElementById('LA');
@@ -1712,35 +1623,38 @@ function setupTouch() {
     for(let i=0;i<e.changedTouches.length;i++){
       const t=e.changedTouches[i];
       if(t.identifier===ltId){
-        mDx+=(t.clientX-ltLX)*1.65; mDy+=(t.clientY-ltLY)*1.65;
+        mDx+=(t.clientX-ltLX)*1.7; mDy+=(t.clientY-ltLY)*1.7;
         ltLX=t.clientX; ltLY=t.clientY;
       }
     }
   },{passive:false});
-  la.addEventListener('touchend',e=>{for(let i=0;i<e.changedTouches.length;i++)if(e.changedTouches[i].identifier===ltId)ltId=null;});
+  la.addEventListener('touchend',e=>{
+    for(let i=0;i<e.changedTouches.length;i++)
+      if(e.changedTouches[i].identifier===ltId) ltId=null;
+  });
 
-  // Buttons
-  function tbtn(id,onStart,onEnd){
-    const b=document.getElementById(id);
-    b.addEventListener('touchstart',e=>{e.preventDefault();onStart();b.classList.add('on');},{passive:false});
-    b.addEventListener('touchend',e=>{e.preventDefault();onEnd();b.classList.remove('on');},{passive:false});
-    b.addEventListener('touchcancel',()=>{onEnd();b.classList.remove('on');});
+  // Action buttons
+  function tbtn(id,onS,onE){
+    const b=document.getElementById(id); if(!b) return;
+    b.addEventListener('touchstart',e=>{e.preventDefault();onS();b.classList.add('on');},{passive:false});
+    b.addEventListener('touchend',  e=>{e.preventDefault();onE();b.classList.remove('on');},{passive:false});
+    b.addEventListener('touchcancel',()=>{onE();b.classList.remove('on');});
   }
-  tbtn('tb-fire', ()=>{tFire=true;}, ()=>{tFire=false;});
-  tbtn('tb-jump', ()=>{tJump=true;K.space=true;}, ()=>{K.space=false;tJump=false;});
-  tbtn('tb-reload',()=>{if(!reloading)doReload();},()=>{});
-  tbtn('tb-slide', ()=>{K.shift=true;}, ()=>{K.shift=false;});
-  tbtn('tb-swap',  ()=>{switchWp((S.weapon+1)%WEAPONS.length);},()=>{});
-  tbtn('tb-aim',   ()=>{adsActive=true;}, ()=>{adsActive=false;});
+  tbtn('tb-fire',   ()=>{tFire=true;},                        ()=>{tFire=false;});
+  tbtn('tb-jump',   ()=>{tJump=true;K.space=true;},           ()=>{K.space=false;tJump=false;});
+  tbtn('tb-reload', ()=>{if(!reloading)doReload();},          ()=>{});
+  tbtn('tb-slide',  ()=>{K.shift=true;},                      ()=>{K.shift=false;});
+  tbtn('tb-swap',   ()=>{switchWp((S.weapon+1)%WEAPONS.length);},()=>{});
+  tbtn('tb-aim',    ()=>{adsActive=true;},                    ()=>{adsActive=false;});
 
-  // Grenade button
-  const bnadeEl = document.getElementById('tb-nade');
-  if (bnadeEl) {
-    bnadeEl.addEventListener('touchstart',e=>{e.preventDefault();throwGrenade();bnadeEl.classList.add('on');},{passive:false});
-    bnadeEl.addEventListener('touchend',e=>{e.preventDefault();bnadeEl.classList.remove('on');},{passive:false});
+  // Grenade
+  const bnade=document.getElementById('tb-nade');
+  if(bnade){
+    bnade.addEventListener('touchstart',e=>{e.preventDefault();throwGrenade();bnade.classList.add('on');},{passive:false});
+    bnade.addEventListener('touchend',  e=>{e.preventDefault();bnade.classList.remove('on');},{passive:false});
   }
 
-  // Also fire on look zone tap (single tap) — only if not holding fire button
+  // Tap look zone to fire non-auto weapons
   la.addEventListener('touchstart',e=>{
     if(!WEAPONS[S.weapon].auto && !tFire) fire();
   });
@@ -1886,11 +1800,12 @@ function doSync() {
 // ═══════════════════════════════════════════════════════
 // GAME LOOP
 // ═══════════════════════════════════════════════════════
-let frameCount=0, lastFPSTime=0;
+let frameCount=0;
 function gameLoop() {
   if (!gameStarted) return;
   requestAnimationFrame(gameLoop);
   const dt=Math.min(clock.getDelta(), .042);
+  frameCount++;
 
   updatePlayer(dt);
   updateBullets(dt);
@@ -1905,15 +1820,13 @@ function gameLoop() {
   // Auto fire desktop
   if (WEAPONS[S.weapon].auto&&mHeld&&pLocked&&S.alive) fire();
 
-  // Neon light pulse
-  const t=performance.now()*.001;
-  scene.children.forEach(c=>{
-    if(c.isPointLight&&c.userData.neon){c.intensity=c.userData.base+Math.sin(t*2+c.userData.phase)*.4;}
-  });
+  // Heavy DOM updates only every 4 frames (~15fps for UI = fine)
+  if (frameCount%4===0) {
+    doSync();
+    updateLB();
+    updateMinimap();
+  }
 
-  doSync();
-  updateLB();
-  updateMinimap();
   renderer.render(scene, cam);
 }
 
