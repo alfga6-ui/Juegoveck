@@ -314,6 +314,8 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
 
   <div class="wpwheel" id="WW"></div>
   <div id="MMAP"><canvas id="MMC" width="105" height="105"></canvas></div>
+  <!-- Grenade counter -->
+  <div id="gr-hud" style="position:absolute;bottom:max(calc(170px + var(--safe)),190px);left:140px;background:rgba(2,8,14,.85);border:1px solid rgba(170,255,0,.35);border-radius:4px;padding:.32em .7em;font-family:'Orbitron',sans-serif;font-size:.75rem;color:#aaff00;letter-spacing:.1em">💣 3</div>
 </div>
 
 <div id="DMGF"></div>
@@ -337,6 +339,7 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
   <button class="tbtn" id="tb-slide">SLIDE</button>
   <button class="tbtn" id="tb-swap">SWAP</button>
   <button class="tbtn" id="tb-aim">AIM</button>
+  <button class="tbtn" id="tb-nade" style="width:48px;height:48px;right:130px;bottom:max(calc(122px + var(--safe)),138px);border-color:rgba(170,255,0,.5);font-size:.45rem">💣</button>
 </div>
 
 <!-- POINTER LOCK -->
@@ -346,6 +349,12 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
 
 <div id="PAUSE">
   <div class="p-ttl">PAUSA</div>
+  <div style="font-family:'Share Tech Mono',monospace;font-size:.62rem;color:rgba(0,245,255,.55);letter-spacing:.1em;margin-bottom:1em;text-align:center;line-height:1.9em">
+    WASD = MOVER &nbsp;|&nbsp; RATÓN = MIRAR &nbsp;|&nbsp; CLIC = DISPARAR<br>
+    G = GRANADA &nbsp;|&nbsp; R = RECARGAR &nbsp;|&nbsp; SHIFT = DESLIZAR<br>
+    1-7 = ARMAS &nbsp;|&nbsp; RUEDA = CAMBIAR ARMA &nbsp;|&nbsp; CLIC DER = APUNTAR<br>
+    <span style="color:#aaff00">🚀 PLATAFORMAS CELESTES = SALTO ALTO</span>
+  </div>
   <button class="p-btn" onclick="doResume()">CONTINUAR</button>
   <button class="p-btn danger" onclick="doLeave()">SALIR AL LOBBY</button>
 </div>
@@ -357,18 +366,34 @@ input[type=text]:focus{border-color:var(--c);box-shadow:0 0 14px rgba(0,245,255,
 // WEAPONS — more ammo, better feel
 // ═══════════════════════════════════════════════════════
 const WEAPONS = [
-  { name:'ASSAULT RIFLE', dmg:20, fr:100, ammo:45, maxAmmo:180, reloadT:1600, spread:.035, range:90,  auto:true,  col:0x88aaff, barrel:0.55 },
-  { name:'SHOTGUN',       dmg:18, fr:650, ammo:10, maxAmmo:60,  reloadT:2000, spread:.11,  range:22,  auto:false, col:0xff8844, barrel:0.65, pellets:6 },
-  { name:'SNIPER',        dmg:110,fr:1100,ammo:8,  maxAmmo:40,  reloadT:2200, spread:.001, range:250, auto:false, col:0x44ffaa, barrel:0.85 },
-  { name:'SMG',           dmg:13, fr:60,  ammo:50, maxAmmo:200, reloadT:1200, spread:.06,  range:55,  auto:true,  col:0xffcc00, barrel:0.45 },
-  { name:'PISTOL',        dmg:28, fr:380, ammo:18, maxAmmo:90,  reloadT:1100, spread:.025, range:65,  auto:false, col:0xaaaaaa, barrel:0.42 },
-  { name:'ROCKET',        dmg:170,fr:1400,ammo:5,  maxAmmo:20,  reloadT:2800, spread:.018, range:120, auto:false, col:0xff3333, barrel:0.7,  explosive:true },
-  { name:'MINIGUN',       dmg:10, fr:45,  ammo:120,maxAmmo:360, reloadT:3200, spread:.09,  range:65,  auto:true,  col:0xffaa00, barrel:0.5 },
+  { name:'ASSAULT RIFLE', dmg:20, fr:90,  ammo:45, maxAmmo:180, reloadT:1400, spread:.032, range:90,  auto:true,  col:0x88aaff, barrel:0.55 },
+  { name:'SHOTGUN',       dmg:18, fr:480, ammo:10, maxAmmo:60,  reloadT:1600, spread:.10,  range:22,  auto:false, col:0xff8844, barrel:0.65, pellets:6 },
+  { name:'SNIPER',        dmg:110,fr:700, ammo:8,  maxAmmo:40,  reloadT:1800, spread:.001, range:250, auto:false, col:0x44ffaa, barrel:0.85 },
+  { name:'SMG',           dmg:13, fr:50,  ammo:50, maxAmmo:200, reloadT:1000, spread:.055, range:55,  auto:true,  col:0xffcc00, barrel:0.45 },
+  { name:'PISTOL',        dmg:28, fr:220, ammo:18, maxAmmo:90,  reloadT:900,  spread:.022, range:65,  auto:false, col:0xaaaaaa, barrel:0.42 },
+  { name:'ROCKET',        dmg:170,fr:1000,ammo:5,  maxAmmo:20,  reloadT:2200, spread:.015, range:120, auto:false, col:0xff3333, barrel:0.7,  explosive:true },
+  { name:'MINIGUN',       dmg:10, fr:38,  ammo:120,maxAmmo:360, reloadT:2800, spread:.085, range:65,  auto:true,  col:0xffaa00, barrel:0.5 },
+  { name:'GRENADE LAUN',  dmg:140,fr:900, ammo:6,  maxAmmo:24,  reloadT:1800, spread:.02,  range:80,  auto:false, col:0x88ff44, barrel:0.6,  explosive:true },
 ];
 const PCOLS = [0xff4466,0x44aaff,0xaaff44,0xff8800,0xcc44ff,0x44ffcc,0xff4488,0xffdd00];
 const SPAWNS = [[0,1.8,42],[0,1.8,-42],[42,1.8,0],[-42,1.8,0],[32,1.8,32],[-32,1.8,32],[32,1.8,-32],[-32,1.8,-32],[18,1.8,18],[-18,1.8,18]];
 const MAP_SZ = 105;
-const GG_ORDER = [0,4,1,3,2,6,5];
+
+// Jump pads: [cx, cz, launchVY] — glowing cyan platforms that launch you high
+const JUMP_PADS = [
+  [0,  18, 26],
+  [0, -18, 26],
+  [18,  0, 26],
+  [-18, 0, 26],
+  [30, 30, 22],
+  [-30,30, 22],
+  [30,-30, 22],
+  [-30,-30,22],
+];
+const jumpPadMeshes = [];
+
+// Active grenades in world
+const grenades = [];
 
 // Map blocks [cx, cz, w, d, h, type]
 const MAP = [
@@ -378,6 +403,14 @@ const MAP = [
   [32,0,3,3,2,'c'],[-32,0,3,3,2,'c'],[0,32,3,3,2,'c'],[0,-32,3,3,2,'c'],
   [22,11,2,2,2,'c'],[-22,11,2,2,2,'c'],[22,-11,2,2,2,'c'],[-22,-11,2,2,2,'c'],
   [10,28,6,3,3,'b'],[-10,28,6,3,3,'b'],[10,-28,6,3,3,'b'],[-10,-28,6,3,3,'b'],
+  // Tall sniper tower at center
+  [0,0,4,4,18,'b'],
+  // Corner elevated platforms
+  [38,38,7,7,6,'b'],[-38,38,7,7,6,'b'],[38,-38,7,7,6,'b'],[-38,-38,7,7,6,'b'],
+  // Mid-level cover walls
+  [8,0,1,8,1.5,'c'],[-8,0,1,8,1.5,'c'],[0,8,8,1,1.5,'c'],[0,-8,8,1,1.5,'c'],
+  // Stepped obstacles
+  [15,15,3,3,3,'o'],[-15,15,3,3,3,'o'],[15,-15,3,3,3,'o'],[-15,-15,3,3,3,'o'],
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -408,8 +441,8 @@ const S = { // local player state
   health:100, shield:0,
   kills:0, deaths:0, score:0,
   alive:true, weapon:0,
-  ammo:[45,10,8,50,18,5,120],
-  reserve:[180,60,40,200,90,20,360],
+  ammo:[45,10,8,50,18,5,120,6],
+  reserve:[180,60,40,200,90,20,360,24],
   onGround:false, sliding:false, sVx:0, sVz:0,
   ggProg:0, color:PCOLS[0], name:'PLAYER',
   velX:0, velZ:0  // smooth velocity
@@ -529,7 +562,7 @@ function doSpawn() {
   S.y = sp[1]; S.z = sp[2]+(Math.random()-.5)*3;
   S.yaw = Math.random()*Math.PI*2;
   S.health=100; S.alive=true; S.vy=0; S.velX=0; S.velZ=0;
-  S.ammo=[45,10,8,50,18,5,120]; S.reserve=[180,60,40,200,90,20,360];
+  S.ammo=[45,10,8,50,18,5,120,6]; S.reserve=[180,60,40,200,90,20,360,24];
 }
 
 function doFinishStart() {
@@ -550,6 +583,7 @@ function doFinishStart() {
   setupKeys();
   buildWpUI();
   updateHUD();
+  grenadeCount=3; updateGrenadeHUD();
   gameStarted = true;
   gameLoop();
 }
@@ -585,6 +619,15 @@ function onData(data, from) {
   } else if (data.type==='impact') {
     // Show bullet impact decal at given world position
     spawnDecal(data.px, data.py, data.pz, data.nx, data.ny, data.nz);
+  } else if (data.type==='grenade') {
+    // Spawn grenade thrown by remote player
+    const gd = data.gdata;
+    const geo = new THREE.SphereGeometry(.12, 6, 6);
+    const mat = new THREE.MeshStandardMaterial({color:0x447700, roughness:.6, metalness:.4, emissive:0x223300});
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(gd.x, gd.y, gd.z);
+    scene.add(mesh);
+    grenades.push({mesh, type:'net', vx:gd.vx, vy:gd.vy, vz:gd.vz, life:0, explodeAt:2.5, bounced:0, owner:gd.owner});
   }
 }
 
@@ -768,6 +811,38 @@ function buildWorld() {
     globe.position.set(px,8.35,pz); scene.add(globe);
     const lamp = new THREE.PointLight(0xffe8c0, 3.5, 18);
     lamp.position.set(px,8,pz); scene.add(lamp);
+  });
+
+  // ── JUMP PADS (cyan glowing platforms that launch you high) ──
+  JUMP_PADS.forEach(([px,pz,vy],i)=>{
+    // Base platform
+    const padGeo = new THREE.CylinderGeometry(1.8, 2.0, .25, 12);
+    const padMat = new THREE.MeshStandardMaterial({
+      color:0x00ccff, roughness:.15, metalness:.9,
+      emissive:0x0088cc, emissiveIntensity:.8
+    });
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.position.set(px, .13, pz);
+    pad.userData.jumpVY = vy;
+    pad.userData.isJumpPad = true;
+    scene.add(pad);
+    jumpPadMeshes.push(pad);
+
+    // Arrow pointing up
+    const arrGeo = new THREE.ConeGeometry(.5, 1.2, 6);
+    const arrMat = new THREE.MeshBasicMaterial({color:0x00ffff, transparent:true, opacity:.8});
+    const arr = new THREE.Mesh(arrGeo, arrMat);
+    arr.position.set(px, 1.2, pz);
+    scene.add(arr);
+
+    // Glow light
+    const pl = new THREE.PointLight(0x00f5ff, 3, 8);
+    pl.position.set(px, .5, pz);
+    pl.userData.neon=true; pl.userData.base=3; pl.userData.phase=i*.8;
+    scene.add(pl);
+
+    // Collider for the pad surface (thin, just the top)
+    colliders.push({minX:px-1.8,maxX:px+1.8,minY:0,maxY:.25,minZ:pz-1.8,maxZ:pz+1.8,jumpPad:true,jumpVY:vy});
   });
 }
 
@@ -1208,6 +1283,7 @@ function doDie(killer, wp) {
 function doRespawn() {
   doSpawn(); netSend({type:'sync',id:localId,s:{...S}});
   document.getElementById('DEATH').classList.remove('show');
+  grenadeCount = 3; updateGrenadeHUD();
   updateHUD(); notify('¡REAPARECIDO!');
 }
 
@@ -1262,12 +1338,10 @@ function updatePlayer(dt) {
   S.pitch = Math.max(-Math.PI/2.05, Math.min(Math.PI/2.05, S.pitch));
   mDx=0; mDy=0;
 
-  // === FIXED JOYSTICK: jDx/jDz are WORLD-SPACE (not camera-relative) ===
-  // jDx = strafe left/right (-1..1), jDz = forward/back (-1..1)
-  // We apply them directly in world space so joystick UP always = world forward
+  // Movement calculation
   let moveX=0, moveZ=0;
 
-  // Keyboard: camera-relative
+  // Keyboard: camera-relative (WASD moves relative to where you look)
   if (K.w||K.s||K.a||K.d) {
     const sin=Math.sin(S.yaw), cos=Math.cos(S.yaw);
     if (K.w) { moveX-=sin; moveZ-=cos; }
@@ -1276,10 +1350,18 @@ function updatePlayer(dt) {
     if (K.d) { moveX+=cos; moveZ-=sin; }
   }
 
-  // TOUCH joystick: jDz=-1 = forward (into screen = -Z), jDx= right/left strafe
-  // World-space: joystick forward = -Z world direction (absolute, independent of yaw)
-  moveX += jDx;   // left/right in world space
-  moveZ += jDz;   // forward/back in world space
+  // JOYSTICK: PURELY ABSOLUTE WORLD-SPACE
+  // jDx: raw screen X delta from center (-1=left, +1=right)  → world X axis
+  // jDz: raw screen Y delta from center (-1=up,   +1=down)  → world Z axis
+  // Joystick UP   (jDz=-1) → moveZ -= 1 → player moves toward -Z = screen forward
+  // Joystick DOWN (jDz=+1) → moveZ += 1 → player moves toward +Z = screen backward
+  // Joystick LEFT (jDx=-1) → moveX -= 1 → player moves toward -X = screen left
+  // Joystick RIGHT(jDx=+1) → moveX += 1 → player moves toward +X = screen right
+  // Camera yaw is COMPLETELY IGNORED for joystick movement.
+  if (jActive) {
+    moveX += jDx;
+    moveZ += jDz;
+  }
 
   const len = Math.hypot(moveX, moveZ);
   if (len>1) { moveX/=len; moveZ/=len; }
@@ -1320,6 +1402,13 @@ function updatePlayer(dt) {
       // Stand on top
       if (S.y<c.maxY&&S.y+PH>c.maxY&&S.vy<0&&Math.abs(dx)<(c.maxX-c.minX)/2+PR*.5&&Math.abs(dz)<(c.maxZ-c.minZ)/2+PR*.5) {
         S.y=c.maxY; S.vy=0; S.onGround=true;
+        // JUMP PAD!
+        if (c.jumpPad) {
+          S.vy = c.jumpVY;
+          S.onGround = false;
+          notify('🚀 ¡PLATAFORMA DE SALTO!');
+          camShakeAmt=.2; camShakeT=.15;
+        }
       }
     }
   }
@@ -1544,6 +1633,7 @@ function setupKeys() {
       case 'Digit3':switchWp(2);break; case 'Digit4':switchWp(3);break;
       case 'Digit5':switchWp(4);break; case 'Digit6':switchWp(5);break;
       case 'Digit7':switchWp(6);break;
+      case 'KeyG': throwGrenade(); break;
       case 'Escape':togglePause();break;
     }
   });
@@ -1601,13 +1691,11 @@ function setupTouch() {
     const nx=Math.cos(ang)*dist, ny=Math.sin(ang)*dist;
     jk.style.transform=`translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
 
-    // WORLD-SPACE: Y-axis of screen = Z-axis of world (forward/back)
-    // X-axis of screen = X-axis of world (left/right)
-    // So: up on joystick (negative dy) = move forward (negative Z = -jDz)
-    jDx = nx/R;    // screen right = world right (+X)
-    jDz = ny/R;    // screen down = world forward (+Z)
-    // NOTE: In Three.js, -Z is "into screen" = forward
-    // So when joystick points up (ny negative), jDz should be negative = forward
+    // ABSOLUTE WORLD AXES — NO camera yaw dependency whatsoever:
+    // Screen X axis  → world X axis  (screen right = +X world)
+    // Screen Y axis  → world Z axis  (screen down  = +Z world, screen up = -Z = forward)
+    jDx = nx / R;    // -1 = world left,   +1 = world right
+    jDz = ny / R;    // -1 = forward (-Z), +1 = backward (+Z)
   },{passive:false});
 
   const resetJoy=()=>{jActive=false;jDx=0;jDz=0;jk.style.transform='translate(-50%,-50%)';};
@@ -1645,9 +1733,142 @@ function setupTouch() {
   tbtn('tb-swap',  ()=>{switchWp((S.weapon+1)%WEAPONS.length);},()=>{});
   tbtn('tb-aim',   ()=>{adsActive=true;}, ()=>{adsActive=false;});
 
-  // Also fire on look zone tap (single tap)
+  // Grenade button
+  const bnadeEl = document.getElementById('tb-nade');
+  if (bnadeEl) {
+    bnadeEl.addEventListener('touchstart',e=>{e.preventDefault();throwGrenade();bnadeEl.classList.add('on');},{passive:false});
+    bnadeEl.addEventListener('touchend',e=>{e.preventDefault();bnadeEl.classList.remove('on');},{passive:false});
+  }
+
+  // Also fire on look zone tap (single tap) — only if not holding fire button
   la.addEventListener('touchstart',e=>{
-    if(!WEAPONS[S.weapon].auto) fire();
+    if(!WEAPONS[S.weapon].auto && !tFire) fire();
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// GRENADE SYSTEM — physics-based bouncing grenades
+// ═══════════════════════════════════════════════════════
+let grenadeCount = 3; // player's grenade stock
+let grCooldown = 0;
+
+function throwGrenade() {
+  if (!S.alive) return;
+  const now = Date.now();
+  if (now - grCooldown < 1200) return; // 1.2s cooldown
+  if (grenadeCount <= 0) { notify('SIN GRANADAS'); return; }
+  grCooldown = now;
+  grenadeCount--;
+  updateGrenadeHUD();
+
+  // Direction = where camera looks, with slight upward arc
+  const dir = new THREE.Vector3(0, 0, -1);
+  dir.applyEuler(new THREE.Euler(S.pitch - .25, S.yaw, 0, 'YXZ'));
+
+  const geo = new THREE.SphereGeometry(.12, 6, 6);
+  const mat = new THREE.MeshStandardMaterial({color:0x447700, roughness:.6, metalness:.4, emissive:0x223300});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(S.x + dir.x*.8, S.y + .1, S.z + dir.z*.8);
+  scene.add(mesh);
+
+  // Pin ring visual
+  const ringGeo = new THREE.TorusGeometry(.1, .02, 4, 8);
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xffcc00}));
+  mesh.add(ring);
+
+  const spd = 18;
+  grenades.push({
+    mesh, type:'normal',
+    vx: dir.x*spd, vy: dir.y*spd + 4, vz: dir.z*spd,
+    life: 0, explodeAt: 2.5,   // explodes after 2.5s
+    bounced: 0
+  });
+  netSend({type:'grenade', gdata:{
+    x:mesh.position.x, y:mesh.position.y, z:mesh.position.z,
+    vx:dir.x*spd, vy:dir.y*spd+4, vz:dir.z*spd,
+    type:'normal', owner:localId
+  }});
+}
+
+function updateGrenadeHUD() {
+  let el = document.getElementById('gr-hud');
+  if (!el) return;
+  el.textContent = '💣 ' + grenadeCount;
+}
+
+function updateGrenades(dt) {
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i];
+    g.life += dt;
+
+    // Physics
+    g.vy -= 18 * dt;
+    g.mesh.position.x += g.vx * dt;
+    g.mesh.position.y += g.vy * dt;
+    g.mesh.position.z += g.vz * dt;
+
+    // Rotate visually
+    g.mesh.rotation.x += dt * 8;
+    g.mesh.rotation.z += dt * 5;
+
+    // Ground bounce
+    if (g.mesh.position.y <= .2) {
+      g.mesh.position.y = .2;
+      g.vy = Math.abs(g.vy) * .45;
+      g.vx *= .65; g.vz *= .65;
+      g.bounced++;
+      // Blink red when about to explode
+      if (g.life > g.explodeAt - .5) {
+        g.mesh.material.emissive.setHex(0xff2200);
+        g.mesh.material.emissiveIntensity = .8;
+      }
+    }
+
+    // Wall bounce (simple)
+    for (const c of colliders) {
+      const gx=g.mesh.position.x, gy=g.mesh.position.y, gz=g.mesh.position.z;
+      if (gx>c.minX-.15&&gx<c.maxX+.15&&gy>c.minY&&gy<c.maxY+.15&&gz>c.minZ-.15&&gz<c.maxZ+.15) {
+        if (gx<c.minX||gx>c.maxX) g.vx*=-.55;
+        else if (gz<c.minZ||gz>c.maxZ) g.vz*=-.55;
+        g.vx*=.8; g.vz*=.8;
+        break;
+      }
+    }
+
+    // Explode
+    if (g.life >= g.explodeAt) {
+      const ex=g.mesh.position.x, ey=g.mesh.position.y, ez=g.mesh.position.z;
+      scene.remove(g.mesh);
+      grenades.splice(i, 1);
+      spawnImpact(ex, ey+.5, ez, 0, 1, 0, true);
+      // Damage local player
+      const dist = Math.hypot(ex-S.x, ey-S.y, ez-S.z);
+      if (dist < 9) {
+        const dmg = Math.floor(120 * Math.max(0, 1 - dist/9));
+        if (dmg > 0) takeDmg(dmg, 'GRANADA', 'GRENADE', {x:ex,y:ey,z:ez});
+      }
+      // Damage remote players
+      for (const id in pMeshes) {
+        if (id === localId) continue;
+        const pm = pMeshes[id];
+        const d2 = Math.hypot(ex-pm.position.x, ey-pm.position.y, ez-pm.position.z);
+        if (d2 < 9 && players[id] && players[id].alive) {
+          const dmg2 = Math.floor(120 * Math.max(0, 1-d2/9));
+          if (dmg2 > 0) {
+            netSend({type:'hit', h:{victim:id, shooter:localId, sName:localName, dmg:dmg2, wp:'GRENADE', fatal:(players[id].health||100)-dmg2<=0}});
+            if ((players[id].health||100)-dmg2<=0) giveKill(players[id].name||'PLAYER','GRENADE');
+          }
+        }
+      }
+      camShakeAmt=.35; camShakeT=.3;
+    }
+  }
+
+  // Animate jump pads
+  const t = performance.now() * .003;
+  jumpPadMeshes.forEach((pad,i)=>{
+    pad.rotation.y = t + i * .8;
+    pad.material.emissiveIntensity = .5 + Math.sin(t*3+i)*.4;
   });
 }
 
@@ -1674,6 +1895,7 @@ function gameLoop() {
   updatePlayer(dt);
   updateBullets(dt);
   updateParticles(dt);
+  updateGrenades(dt);
   interpRemotes(dt);
   updateRecoil(dt);
 
